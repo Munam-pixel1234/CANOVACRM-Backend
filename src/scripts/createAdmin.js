@@ -17,16 +17,22 @@ const createAdmin = async () => {
 
     if (existing) {
       existing.role = "Admin";
+      existing.language = "english"; // ✅ REQUIRED
+      existing.status = "Active";    // ✅ IMPORTANT
       existing.password = bcrypt.hashSync(password, 10);
       await existing.save();
-      console.log("✅ Admin already existed — role fixed");
+
+      console.log("✅ Admin already existed — role & fields fixed");
     } else {
       await User.create({
         name: "Admin",
         email,
         role: "Admin",
-        password: bcrypt.hashSync(password, 10)
+        language: "english", // ✅ REQUIRED
+        status: "Active",    // ✅ IMPORTANT
+        password: bcrypt.hashSync(password, 10),
       });
+
       console.log("✅ Admin user created successfully");
     }
 
