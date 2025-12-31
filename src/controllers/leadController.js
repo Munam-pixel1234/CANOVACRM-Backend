@@ -35,8 +35,13 @@ export const createLead = async (req, res) => {
 
     const normalizedLang = language.trim().toLowerCase();
 
-    // 🔹 Assign exactly one lead
-    const [assignedTo] = await assignLeadsBatch(normalizedLang, 1);
+    // ✅ SAFE ASSIGNMENT (FIX)
+    let assignedTo = null;
+    try {
+      [assignedTo] = await assignLeadsBatch(normalizedLang, 1);
+    } catch (err) {
+      console.warn("Lead created unassigned:", err.message);
+    }
 
     const lead = await Lead.create({
       name,
@@ -45,11 +50,11 @@ export const createLead = async (req, res) => {
       date: date ? new Date(date) : new Date(),
       location,
       language: normalizedLang,
-      assignedTo: assignedTo || null,
+      assignedTo,
       status: "Ongoing",
     });
 
-    // ✅ Increment assigned leads
+    // ✅ Increment assigned leads only if assigned
     if (assignedTo) {
       await User.findByIdAndUpdate(assignedTo, {
         $inc: { assignedLeads: 1 },
@@ -81,7 +86,7 @@ export const updateLead = async (req, res) => {
       return res.status(404).json({ message: "Lead not found" });
     }
 
-    /* ================= SCHEDULE ================= */
+    // Schedule lead
     if (type === "Scheduled") {
       if (!scheduledDate) {
         return res.status(400).json({
@@ -94,9 +99,8 @@ export const updateLead = async (req, res) => {
       lead.status = "Ongoing";
     }
 
-    /* ================= CLOSE ================= */
+    // Close lead
     if (status === "Closed" && lead.status !== "Closed") {
-      // ❌ Block closing before scheduled time
       if (
         lead.type === "Scheduled" &&
         lead.scheduledDate &&
@@ -123,7 +127,6 @@ export const updateLead = async (req, res) => {
     await lead.save();
     res.json(lead);
   } catch (error) {
-    console.error("Update Lead Error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -146,7 +149,7 @@ export const uploadCSV = async (req, res) => {
     let inserted = 0;
     let unassigned = 0;
 
-    // 🔹 Group leads by language
+    // Group leads by language
     for (const lead of leads) {
       const lang = lead.language?.trim().toLowerCase();
       if (!lang) continue;
@@ -155,33 +158,39 @@ export const uploadCSV = async (req, res) => {
       grouped[lang].push(lead);
     }
 
-    // 🔹 Assign leads per language
+    // Assign leads per language
     for (const lang in grouped) {
       const batch = grouped[lang];
-      const assignedUsers = await assignLeadsBatch(lang, batch.length);
+      let assignedUsers = [];
+
+      try {
+        assignedUsers = await assignLeadsBatch(lang, batch.length);
+      } catch (err) {
+        console.warn(`CSV leads unassigned for ${lang}:`, err.message);
+        assignedUsers = new Array(batch.length).fill(null);
+      }
 
       await Promise.all(
         batch.map((lead, i) =>
           Lead.create({
             ...lead,
-            assignedTo: assignedUsers[i] || null,
+            assignedTo: assignedUsers[i],
             status: "Ongoing",
           }).then(async () => {
-            // ✅ Increment assigned leads
             if (assignedUsers[i]) {
               await User.findByIdAndUpdate(assignedUsers[i], {
                 $inc: { assignedLeads: 1 },
               });
+              inserted++;
+            } else {
+              unassigned++;
             }
 
-            // ✅ Activity log
             await Activity.create({
               message: assignedUsers[i]
                 ? `Lead assigned (${lang})`
                 : `Lead unassigned (${lang})`,
             });
-
-            assignedUsers[i] ? inserted++ : unassigned++;
           })
         )
       );
@@ -200,9 +209,6 @@ export const uploadCSV = async (req, res) => {
   }
 };
 
-
-
-
 /* ===============================
    GET ASSIGNED LEADS (SALES)
 ================================ */
@@ -210,9 +216,9 @@ export const getAssignedLeads = async (req, res) => {
   try {
     const leads = await Lead.find({
       assignedTo: req.user._id,
-    }).select(
-      "name email phone source date status type scheduledDate"
-    ).sort({ createdAt: -1 });
+    })
+      .select("name email source date status type scheduledDate")
+      .sort({ createdAt: -1 });
 
     res.json(leads);
   } catch (error) {
