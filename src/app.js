@@ -8,8 +8,12 @@ import leadRoutes from "./routes/leadRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+import tempAdmin from "./routes/tempAdmin.js";
+
+
 
 const app = express();
+app.use("/api/temp", tempAdmin);
 
 /* =========================
    MIDDLEWARES (FIXED)
