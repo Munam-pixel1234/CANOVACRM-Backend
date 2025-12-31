@@ -9,31 +9,30 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 
-
-
-
 const app = express();
 
-
 /* =========================
-   MIDDLEWARES (FIXED)
+   GLOBAL MIDDLEWARES
 ========================= */
 app.use(express.json());
 app.use(cookieParser());
 
+/*
+  ✅ CORS FIX (IMPORTANT)
+  - Allow browser requests from anywhere
+  - JWT is sent via Authorization header
+  - NO cookies required
+*/
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",
-      "https://canova-admin-frontend.vercel.app",
-      "https://canova-user-frontend.vercel.app",
-    ],
-    credentials: true,
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
 /* =========================
-   ROUTES (NO CHANGE)
+   ROUTES
 ========================= */
 app.get("/", (req, res) => {
   res.send("Sales CRM API Running");
